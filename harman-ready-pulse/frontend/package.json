@@ -2,10 +2,14 @@
   "name": "frontend",
   "version": "1.0.0",
   "dependencies": {
+    "@turf/turf": "^7.3.4",
+    "leaflet": "^1.9.4",
+    "mapbox-gl": "^3.22.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-router-dom": "^6.20.0",
+    "react-leaflet": "^4.2.1",
     "react-map-gl": "^7.1.6",
+    "react-router-dom": "^6.20.0",
     "socket.io-client": "^4.7.2",
     "tailwindcss": "^3.3.5"
   }
