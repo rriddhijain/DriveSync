@@ -72,7 +72,7 @@ export default function Dashboard() {
     >
       {/* 🔷 HEADER */}
       <h1 className="text-xl mb-4 text-gray-400 font-semibold tracking-widest uppercase">
-        Harman Digital Cockpit
+        Controller Pit
       </h1>
 
       {/* 📶 NETWORK BAR */}
