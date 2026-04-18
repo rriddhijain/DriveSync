@@ -1,19 +1,36 @@
 import React from "react";
-import { MessageCircle, Users, Hash, PhoneCall, Bell } from "lucide-react";
+import { MessageCircle, Users, Hash, PhoneCall, Bell, Mail, Play, Camera } from "lucide-react";
 
-// Helper to determine app metadata based on sender
-const getAppMetadata = (sender) => {
-  const s = sender.toLowerCase();
-  if (s.includes("mom")) return { title: "Messages", Icon: MessageCircle, color: "text-blue-400" };
-  if (s.includes("boss")) return { title: "Teams", Icon: Users, color: "text-indigo-400" };
-  if (s.includes("slack")) return { title: "Slack", Icon: Hash, color: "text-purple-400" };
-  if (s.includes("airtel")) return { title: "Phone", Icon: PhoneCall, color: "text-green-400" };
-  return { title: "Notification", Icon: Bell, color: "text-gray-400" };
+// Helper to determine app metadata based on the app name field
+const getAppMetadata = (appName) => {
+  switch (appName) {
+    case "WhatsApp":
+      return { title: "WhatsApp", Icon: MessageCircle, color: "text-green-400" };
+    case "Gmail":
+      return { title: "Gmail", Icon: Mail, color: "text-red-400" };
+    case "Teams":
+      return { title: "Teams", Icon: Users, color: "text-indigo-400" };
+    case "Slack":
+      return { title: "Slack", Icon: Hash, color: "text-purple-400" };
+    case "YouTube":
+      return { title: "YouTube", Icon: Play, color: "text-red-500" };
+    case "Instagram":
+      return { title: "Instagram", Icon: Camera, color: "text-pink-400" };
+    default:
+      return { title: appName || "Notification", Icon: Bell, color: "text-gray-400" };
+  }
 };
 
 const NotificationItem = React.memo(({ msg }) => {
   const priority = msg.priority || 2; 
-  const { title, Icon, color } = getAppMetadata(msg.sender);
+  const { title, Icon, color } = getAppMetadata(msg.app);
+
+  // Use displayTime if available, fall back to formatting the numeric timestamp
+  const displayTime = msg.displayTime || (
+    typeof msg.timestamp === "number"
+      ? new Date(msg.timestamp).toLocaleTimeString()
+      : msg.timestamp
+  );
 
   let containerClass = "bg-gray-800 border-gray-700";
   let textClass = "text-gray-200 text-sm mt-2";
@@ -36,7 +53,7 @@ const NotificationItem = React.memo(({ msg }) => {
           <Icon className={`w-5 h-5 ${color}`} />
           <span className="font-bold text-gray-300 tracking-wide text-sm uppercase">{title}</span>
         </div>
-        <span className="text-xs text-gray-400 font-mono">{msg.timestamp}</span>
+        <span className="text-xs text-gray-400 font-mono">{displayTime}</span>
       </div>
 
       {/* Sub-Header (Sender) */}

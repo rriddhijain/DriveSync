@@ -1,21 +1,25 @@
 import React, { useState } from "react";
 import Slider from "rc-slider";
 import "rc-slider/assets/index.css";
-import { MessageCircle, Hash, Users, MessageSquare, ChevronDown } from "lucide-react";
+import { MessageCircle, Hash, Users, Mail, Play, Camera, ChevronDown } from "lucide-react";
 
 const APPS = [
   { id: "whatsapp", name: "WhatsApp", Icon: MessageCircle, color: "text-green-500" },
+  { id: "gmail", name: "Gmail", Icon: Mail, color: "text-red-500" },
   { id: "slack", name: "Slack", Icon: Hash, color: "text-purple-500" },
   { id: "teams", name: "Teams", Icon: Users, color: "text-indigo-500" },
-  { id: "messages", name: "Messages", Icon: MessageSquare, color: "text-blue-500" },
+  { id: "youtube", name: "YouTube", Icon: Play, color: "text-red-400" },
+  { id: "instagram", name: "Instagram", Icon: Camera, color: "text-pink-500" },
 ];
 
 export default function SettingsModal({ isOpen, onClose, onSave }) {
   const [preferences, setPreferences] = useState({
-    whatsapp: { priority: 2, timeRange: [9, 17], contactPriority: "Mom" },
-    slack: { priority: 2, timeRange: [9, 18] },
-    teams: { priority: 2, timeRange: [9, 18] },
-    messages: { priority: 2, timeRange: [0, 24] }
+    whatsapp: { priority: 2, timeRange: [0, 24], contactPriority: "Mom" },
+    gmail: { priority: 1, timeRange: [9, 17] },
+    slack: { priority: 1, timeRange: [9, 17] },
+    teams: { priority: 1, timeRange: [9, 18] },
+    youtube: { priority: 3, timeRange: [0, 24] },
+    instagram: { priority: 3, timeRange: [0, 24] }
   });
 
   const [expandedApp, setExpandedApp] = useState("whatsapp");

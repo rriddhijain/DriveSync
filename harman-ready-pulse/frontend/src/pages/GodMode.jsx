@@ -9,7 +9,7 @@ export default function GodMode({ socket }) {
   const [isPlaying, setIsPlaying] = useState(true);
 
   const sendNetworkToggle = (state) => {
-    socket.emit('toggle_network', { network: state });
+    socket.emit('network_state_changed', state);
   };
 
   const toggleSimulation = (playState) => {
@@ -26,7 +26,8 @@ export default function GodMode({ socket }) {
         ? "⚠️ EMERGENCY: Rerouting required due to accident!"
         : msgText,
       is_emergency: isEmergency,
-      timestamp: new Date().toLocaleTimeString()
+      timestamp: Date.now(),
+      displayTime: new Date().toLocaleTimeString()
     };
 
     socket.emit('inject_mock_message', payload);
@@ -117,9 +118,11 @@ export default function GodMode({ socket }) {
                   className="w-full bg-gray-950 border border-gray-800 rounded-xl p-4 text-white focus:outline-none focus:border-blue-500 transition-colors"
                 >
                   <option>WhatsApp</option>
-                  <option>Messages</option>
+                  <option>Gmail</option>
                   <option>Slack</option>
                   <option>Teams</option>
+                  <option>YouTube</option>
+                  <option>Instagram</option>
                 </select>
               </div>
 

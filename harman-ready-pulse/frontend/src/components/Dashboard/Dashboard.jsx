@@ -11,6 +11,7 @@ import MapView from "../../map/MapView";
 export default function Dashboard() {
   const [messages, setMessages] = useState([]);
   const [queueCount, setQueueCount] = useState(0);
+  const [bytesSaved, setBytesSaved] = useState(0);
   const [network, setNetwork] = useState("5G");
   const [summary, setSummary] = useState("");
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -59,11 +60,16 @@ export default function Dashboard() {
       }
     };
 
+    const handleStats = (data) => {
+      setBytesSaved(data.bytesSaved || 0);
+    };
+
     socket.on("receive_live_message", handleMessage);
     socket.on("emergency_alert", handleEmergency);
     socket.on("queue_updated", handleQueue);
     socket.on("network_state_changed", handleNetwork);
     socket.on("ai_summary_generated", handleSummary);
+    socket.on("stats_updated", handleStats);
 
     return () => {
       socket.off("receive_live_message", handleMessage);
@@ -71,6 +77,7 @@ export default function Dashboard() {
       socket.off("queue_updated", handleQueue);
       socket.off("network_state_changed", handleNetwork);
       socket.off("ai_summary_generated", handleSummary);
+      socket.off("stats_updated", handleStats);
     };
   }, []);
 
@@ -196,7 +203,7 @@ export default function Dashboard() {
           <div style={{ flexShrink: 0, borderTop: "1px solid #111827", padding: "12px 16px" }}>
             <SmartSummary text={summary} />
             <div style={{ marginTop: summary ? 8 : 0 }}>
-              <MetricsPanel queueCount={queueCount} />
+              <MetricsPanel queueCount={queueCount} bytesSaved={bytesSaved} />
             </div>
           </div>
         </div>
