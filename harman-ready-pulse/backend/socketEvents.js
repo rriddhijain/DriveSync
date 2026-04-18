@@ -4,15 +4,19 @@ const preferences = require('./state/preferences');
 
 let currentNetwork = "5G";
 
+/** Emit the full stats snapshot to all clients */
+function broadcastStats(io) {
+    io.emit('stats_updated', queue.stats);
+}
+
 /**
- * Helper: Flushes the queue through the AI summarizer and emits results.
+ * Flushes the queue through the AI summarizer and emits results.
  * Called when entering 5G or on manual clear_queue.
  */
 async function flushQueue(io) {
     const missedCount = queue.length;
     if (missedCount === 0) return;
 
-    // Fetch sorted by priority, then chronologically
     const messagesToProcess = queue.getAllSorted();
 
     console.log(`[AI] Summarizing ${missedCount} prioritized messages...`);
@@ -30,7 +34,7 @@ async function flushQueue(io) {
 
     queue.clear();
     io.emit('queue_updated', 0);
-    io.emit('stats_updated', { bytesSaved: 0 });
+    broadcastStats(io);
 }
 
 module.exports = (io) => {
@@ -40,12 +44,11 @@ module.exports = (io) => {
         // Initial State Sync
         socket.emit('network_state_changed', currentNetwork);
         socket.emit('queue_updated', queue.length);
-        socket.emit('stats_updated', { bytesSaved: queue.savedData });
+        socket.emit('stats_updated', queue.stats);
 
         /**
          * EVENT: network_state_changed
-         * When the network switches to 5G and the queue has items,
-         * auto-flush: summarize + clear the queue.
+         * When switching to 5G from DEAD_ZONE, auto-flush the pending queue.
          */
         socket.on('network_state_changed', async (state) => {
             const previousNetwork = currentNetwork;
@@ -53,9 +56,8 @@ module.exports = (io) => {
             io.emit('network_state_changed', state);
             console.log(`[NETWORK] State changed to ${state}`);
 
-            // Entering 5G from DEAD_ZONE → auto-flush the queue
             if (state === "5G" && previousNetwork === "DEAD_ZONE" && queue.length > 0) {
-                console.log(`[NETWORK] Entered 5G with ${queue.length} queued messages. Auto-flushing...`);
+                console.log(`[NETWORK] Entered 5G with ${queue.length} pending. Auto-flushing...`);
                 await flushQueue(io);
             }
         });
@@ -63,13 +65,13 @@ module.exports = (io) => {
         /**
          * EVENT: inject_mock_message
          *
-         * Decision tree (Patch 2):
-         *   1. Compute priority via Preference Engine.
+         * Routing Decision Tree:
+         *   1. Compute priority via Preference Engine
          *   2. Ask AI: is_emergency?
-         *   3. If DEAD_ZONE:
-         *        - emergency → deliver immediately (safety-critical)
-         *        - everything else → push to queue (save bandwidth)
-         *   4. If 5G:
+         *   3. DEAD_ZONE:
+         *        - emergency OR priority === 1 → deliver immediately
+         *        - P2, P3 → defer to queue
+         *   4. 5G:
          *        - deliver everything immediately
          */
         socket.on('inject_mock_message', async (msg) => {
@@ -79,54 +81,87 @@ module.exports = (io) => {
             console.log(`[INCOMING] Text from ${msg.sender} via ${msg.app}`);
 
             try {
-                // Step 1: Run the Priority Engine
+                // Step 1: Priority Engine
                 msg.priority = preferences.getPriority(msg.app, msg.sender);
                 console.log(`[TRIAGE] Assigned Priority: ${msg.priority}`);
 
-                // Step 2: Run the Edge AI Gatekeeper
+                // Step 2: Edge AI Gatekeeper
                 const isEmergency = await checkEmergencyIntent(msg.text);
                 msg.is_emergency = isEmergency;
 
-                // Step 3: Routing based on network state
+                // Step 3: Route based on network
                 if (currentNetwork === "5G") {
-                    // ── 5G: deliver everything live ──
+                    // 5G: deliver everything live
+                    queue.trackDelivered(msg);
                     if (isEmergency) {
                         io.emit('emergency_alert', { ...msg, is_emergency: true });
-                        console.log("🚨 Emergency Alert Broadcasted (5G)");
+                        console.log("🚨 Emergency Alert (5G)");
                     } else {
                         io.emit('receive_live_message', msg);
-                        console.log("📲 Live Message Broadcasted (5G)");
+                        console.log("📲 Live Message (5G)");
                     }
+                    broadcastStats(io);
                 } else {
-                    // ── DEAD_ZONE routing ──
+                    // DEAD_ZONE
                     if (isEmergency || msg.priority === 1) {
-                        // Emergencies + Priority 1 break through dead zone
+                        // Critical: push through
+                        queue.trackDelivered(msg);
                         if (isEmergency) {
                             io.emit('emergency_alert', { ...msg, is_emergency: true });
-                            console.log("🚨 Emergency Alert Broadcasted (DEAD_ZONE override)");
+                            console.log("🚨 Emergency Alert (DEAD_ZONE override)");
                         } else {
                             io.emit('receive_live_message', msg);
                             console.log("📲 Priority-1 Delivered (DEAD_ZONE override)");
                         }
                     } else {
-                        // P2, P3 → queue for later
+                        // P2, P3 → defer
                         queue.push(msg);
-                        console.log(`📦 Message Deferred (P${msg.priority}). Pending: ${queue.length}`);
-
+                        console.log(`📦 Deferred (P${msg.priority}). Pending: ${queue.length}`);
                         io.emit('queue_updated', queue.length);
-                        io.emit('stats_updated', { bytesSaved: queue.savedData });
                     }
+                    broadcastStats(io);
                 }
             } catch (error) {
                 console.error("[ERROR] Routing failed:", error);
-                // Fallback: deliver it so the user doesn't lose a message
                 io.emit('receive_live_message', msg);
             }
         });
 
         /**
-         * EVENT: clear_queue (manual flush from UI)
+         * EVENT: update_preferences
+         * Receives config from the Settings modal and updates the engine.
          */
+        socket.on('update_preferences', (config) => {
+            if (!config) return;
+            // Map frontend config format to backend rules
+            Object.keys(config).forEach(appId => {
+                const appConfig = config[appId];
+                // Find matching rule by lowercasing
+                const ruleKey = Object.keys(preferences.rules).find(
+                    k => k.toLowerCase() === appId.toLowerCase()
+                );
+                if (ruleKey && appConfig.priority) {
+                    preferences.rules[ruleKey].priority = appConfig.priority;
+                    if (appConfig.timeRange) {
+                        preferences.rules[ruleKey].activeWindow = {
+                            start: appConfig.timeRange[0],
+                            end: appConfig.timeRange[1]
+                        };
+                    }
+                    // WhatsApp contact priority override
+                    if (appId === 'whatsapp' && appConfig.contactPriority) {
+                        if (!preferences.rules[ruleKey].contacts) {
+                            preferences.rules[ruleKey].contacts = {};
+                        }
+                        preferences.rules[ruleKey].contacts[appConfig.contactPriority] = { priority: 1 };
+                    }
+                }
+            });
+            console.log('[PREFS] User preferences updated from Settings UI');
+            io.emit('preferences_updated', preferences.rules);
+        });
+
+        /** EVENT: clear_queue (manual flush from UI) */
         socket.on('clear_queue', async () => {
             await flushQueue(io);
         });
