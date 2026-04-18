@@ -7,7 +7,7 @@ class PreferencesManager {
     this.rules = {
       "WhatsApp": {
         basePriority: 2,
-        timeWindow: { start: "09:00", end: "17:00" },
+        timeWindow: { start: "00:00", end: "23:59" },
         contactOverrides: {
           "Mom": 1,
           "Boss": 1
@@ -15,17 +15,17 @@ class PreferencesManager {
       },
       "Gmail": {
         basePriority: 1,
-        timeWindow: { start: "09:00", end: "18:00" },
+        timeWindow: { start: "00:00", end: "23:59" },
         contactOverrides: {}
       },
       "Slack": {
         basePriority: 1,
-        timeWindow: { start: "09:00", end: "17:00" },
+        timeWindow: { start: "09:00", end: "20:00" },
         contactOverrides: {}
       },
       "Teams": {
         basePriority: 1,
-        timeWindow: { start: "09:00", end: "18:00" },
+        timeWindow: { start: "09:00", end: "20:00" },
         contactOverrides: {}
       },
       "Instagram": {
@@ -76,8 +76,8 @@ class PreferencesManager {
     }
 
     if (!inWindow) {
-      console.log(`[PRIORITY] ${appName} is outside time window. Demoting to Priority 999.`);
-      return { priority: 999, isContactOverride: false };
+      console.log(`[PRIORITY] ${appName} is outside time window. Demoting to Priority 3.`);
+      return { priority: 3, isContactOverride: false };
     }
 
     // 2. VIP Override (Second Highest)

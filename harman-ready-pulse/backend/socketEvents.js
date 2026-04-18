@@ -88,8 +88,7 @@ module.exports = (io) => {
                 const priorityData = preferences.calculateAbsolutePriority(msg);
                 msg.absolutePriority = priorityData.priority;
                 msg.isContactOverride = priorityData.isContactOverride;
-                // For UI display, we can map 999 to 4 or just pass it through
-                msg.priority = msg.absolutePriority === 999 ? 4 : msg.absolutePriority;
+                msg.priority = msg.absolutePriority; // 1=High, 2=Medium, 3=Low
                 console.log(`[TRIAGE] Assigned Absolute Priority: ${msg.absolutePriority}`);
 
                 // Step 2: Edge AI Gatekeeper
@@ -97,10 +96,15 @@ module.exports = (io) => {
                 msg.is_emergency = isEmergency;
 
                 // Step 3: Route based on network
+                // Note: isEmergency = AI determination. msg.is_emergency = client flag (from GodMode TRIGGER EMERGENCY).
+                // Both must be respected.
+                const emergencyFlag = isEmergency || msg.is_emergency;
+                msg.is_emergency = emergencyFlag; // normalise so UI always gets the right flag
+
                 if (currentNetwork === "5G") {
                     // 5G: deliver everything live
                     queue.trackDelivered(msg);
-                    if (isEmergency) {
+                    if (emergencyFlag) {
                         io.emit('emergency_alert', { ...msg, is_emergency: true });
                         console.log("🚨 Emergency Alert (5G)");
                     } else {
@@ -109,11 +113,10 @@ module.exports = (io) => {
                     }
                     broadcastStats(io);
                 } else {
-                    // DEAD_ZONE
-                    if (isEmergency || msg.absolutePriority === 1) {
-                        // Critical: push through
+                    // DEAD_ZONE: only emergencies and P1 break through
+                    if (emergencyFlag || msg.absolutePriority === 1) {
                         queue.trackDelivered(msg);
-                        if (isEmergency) {
+                        if (emergencyFlag) {
                             io.emit('emergency_alert', { ...msg, is_emergency: true });
                             console.log("🚨 Emergency Alert (DEAD_ZONE override)");
                         } else {
@@ -121,7 +124,7 @@ module.exports = (io) => {
                             console.log("📲 Priority-1 Delivered (DEAD_ZONE override)");
                         }
                     } else {
-                        // P2, P3, P999 → defer
+                        // P2, P3 → defer
                         queue.push(msg);
                         console.log(`📦 Deferred (P${msg.absolutePriority}). Pending: ${queue.length}`);
                         io.emit('queue_updated', queue.length);
