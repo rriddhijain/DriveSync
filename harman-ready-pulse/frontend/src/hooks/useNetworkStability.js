@@ -17,11 +17,11 @@ import { useState, useRef, useEffect, useCallback } from "react";
 /** @type {number} Signal threshold below which we instantly fail */
 const FAIL_THRESHOLD = 0.6;
 
-/** @type {number} Signal threshold above which we begin recovery */
-const RECOVER_THRESHOLD = 0.8;
+/** @type {number} Signal threshold above which we begin recovery (Dark green heatmap region) */
+const RECOVER_THRESHOLD = 0.95;
 
-/** @type {number} Milliseconds the signal must stay above RECOVER_THRESHOLD to recover */
-const RECOVER_HOLD_MS = 3000;
+/** @type {number} Milliseconds the signal must stay above RECOVER_THRESHOLD to recover (100% certainty) */
+const RECOVER_HOLD_MS = 5000;
 
 /**
  * @param {number} rawSignalStrength - Current signal strength (0.0 – 1.0)

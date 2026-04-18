@@ -23,6 +23,12 @@ export default function Dashboard() {
   useEffect(() => {
     const handleMessage = (msg) => setMessages((prev) => [msg, ...prev]);
 
+    const handleBatchMessages = (batch) => {
+      // The batch is already sorted by priority & timestamp by the backend.
+      // Prepend the entire batch atomically so they appear at the top.
+      setMessages((prev) => [...batch, ...prev]);
+    };
+
     const handleEmergency = (msg) => {
       setMessages((prev) => [msg, ...prev]);
       if ("speechSynthesis" in window) {
@@ -68,6 +74,7 @@ export default function Dashboard() {
     };
 
     socket.on("receive_live_message", handleMessage);
+    socket.on("receive_batch_messages", handleBatchMessages);
     socket.on("emergency_alert", handleEmergency);
     socket.on("queue_updated", handleQueue);
     socket.on("network_state_changed", handleNetwork);
@@ -76,6 +83,7 @@ export default function Dashboard() {
 
     return () => {
       socket.off("receive_live_message", handleMessage);
+      socket.off("receive_batch_messages", handleBatchMessages);
       socket.off("emergency_alert", handleEmergency);
       socket.off("queue_updated", handleQueue);
       socket.off("network_state_changed", handleNetwork);

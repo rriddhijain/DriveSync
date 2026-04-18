@@ -32,6 +32,9 @@ async function flushQueue(io) {
         });
     }
 
+    // Atomic grouped batch delivery of the missed notifications
+    io.emit('receive_batch_messages', messagesToProcess);
+
     queue.clear();
     io.emit('queue_updated', 0);
     broadcastStats(io);
