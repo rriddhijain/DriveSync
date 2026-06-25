@@ -29,7 +29,7 @@ export default function TopNavbar() {
           <Cpu className="text-white w-6 h-6" />
         </div>
         <NavLink to="/" className="flex flex-col">
-          <span className="text-xl font-bold tracking-widest text-white uppercase">Harman Ready-Pulse</span>
+          <span className="text-xl font-bold tracking-widest text-white uppercase">DriveSync</span>
           <span className="text-xs text-blue-400 font-medium tracking-widest uppercase">System Interface</span>
         </NavLink>
       </div>
