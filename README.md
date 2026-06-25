@@ -38,40 +38,6 @@ DriveSync resolves this by implementing a smart in-vehicle triage system. It fil
 
 ## 5. System Architecture
 
-```mermaid
-flowchart TD
-    subgraph Vehicle HMI Client (React)
-        A[In-Vehicle GPS/Sensors] -->|Position Coordinates| B[Signal Strength Interpolator]
-        B -->|Signal strength < 0.6| C{Hysteresis Filter}
-        B -->|Signal strength >= 0.8| C
-        C -->|Fast Fail / Slow Recover| D[Stable Connection State]
-        D -->|Transition Event| E[Socket.io client]
-    end
-
-    subgraph Telemetry & Triage Server (Node.js)
-        E -->|State Change| F[Socket.io Namespace]
-        G[Incoming Message] --> H[Triage Protocol]
-        H -->|1. AI Intent Classification| I{Edge AI Classifier}
-        I -->|EMERGENCY/SPAM/ROUTINE| J{Priority Engine}
-        J -->|2. Temporal / VIP Overrides| K[Absolute Priority Score]
-        
-        F -->|Current Network State| L{Routing Decider}
-        K -->|Priority Score| L
-        
-        L -->|5G OR Priority <= 1| M[Deliver Instantly to Screen]
-        L -->|DEAD ZONE & Priority > 1| N[Store in FIFO Queue]
-        
-        D -->|Transition to 5G| O[Auto-Flush Queue]
-        O -->|Summarize Queue Array| P[Ollama API / Phi3]
-        P -->|JSON Summary Card| M
-    end
-    
-    subgraph Fleet Analytics Map (Leaflet)
-        Q[15 simulated vehicles] -->|Live Coordinates| R[TurfJS Deadzone Check]
-        R -->|Crowdsourced Heat Points| S[Unified Heatmap Layer]
-    end
-```
-
 ### Stage Explanations
 1.  **Telemetry & Signal Interpolation**: In-vehicle sensors output coordinates. The HMI interpolates local signal strength using an inverse-distance-weighted (IDW) average of the closest geographic heatmap points.
 2.  **Hysteresis Filtering**: The raw signal passes through the stability filter. If the signal drops below 0.6, the state instantly switches to `DEAD_ZONE`. If it rises above 0.8, it must remain stable for 3 seconds before recovering to `5G`.
