@@ -7,14 +7,23 @@ const { point } = require('@turf/helpers');
 // Load user's deadzones
 let deadZonesGeoJSON = { type: "FeatureCollection", features: [] };
 let activeProvider = "Airtel";
+let activeDeadzonesFeatures = []; // Cached list of features for the active provider
+
+function updateActiveDeadzonesCache() {
+  if (!deadZonesGeoJSON || !deadZonesGeoJSON.features) {
+    activeDeadzonesFeatures = [];
+    return;
+  }
+  const providerLower = activeProvider.toLowerCase();
+  activeDeadzonesFeatures = deadZonesGeoJSON.features.filter(f => 
+    !f.properties || !f.properties.network || f.properties.network.toLowerCase().includes(providerLower)
+  );
+}
 
 function getActiveDeadzones() {
-  if (!deadZonesGeoJSON || !deadZonesGeoJSON.features) return { type: "FeatureCollection", features: [] };
   return {
     type: "FeatureCollection",
-    features: deadZonesGeoJSON.features.filter(f => 
-      !f.properties || !f.properties.network || f.properties.network.toLowerCase().includes(activeProvider.toLowerCase())
-    )
+    features: activeDeadzonesFeatures
   };
 }
 
@@ -22,6 +31,7 @@ try {
   const filePath = path.join(__dirname, 'data', 'deadzones.json');
   const fileData = fs.readFileSync(filePath, 'utf-8');
   deadZonesGeoJSON = JSON.parse(fileData);
+  updateActiveDeadzonesCache();
 } catch (error) {
   console.error("Could not load deadzones.json:", error);
 }
@@ -29,7 +39,7 @@ try {
 // Load simulation route
 let routeGeoJSON = null;
 try {
-  const routePath = path.join(__dirname, '../frontend/src/data/simulation_route.json');
+  const routePath = path.join(__dirname, 'data', 'simulation_route.json');
   const routeData = fs.readFileSync(routePath, 'utf-8');
   routeGeoJSON = JSON.parse(routeData);
 } catch(error) {
@@ -39,7 +49,7 @@ try {
 // Check if dead zone
 function isInsideDeadZone(lat, lng) {
   const pt = point([lng, lat]);
-  return getActiveDeadzones().features.some(feature => {
+  return activeDeadzonesFeatures.some(feature => {
      if (feature.geometry && (feature.geometry.type === 'Polygon' || feature.geometry.type === 'MultiPolygon')) {
         return booleanPointInPolygon(pt, feature);
      }
@@ -77,6 +87,7 @@ class FleetSimulator {
         if (provider === activeProvider) return;
         activeProvider = provider;
         console.log(`[FLEET] Network Provider changed to: ${provider}`);
+        updateActiveDeadzonesCache();
         this.prepopulateHeatmap();
         this.telemetryBuffer = []; // Clear live ghost cars on switch
         

@@ -26,6 +26,58 @@ export function PreferencesProvider({ children }) {
     ]
   });
 
+  useEffect(() => {
+    const handlePrefsUpdated = (rules) => {
+      if (!rules) return;
+      
+      const newPrefs = {};
+      const newContacts = { whatsapp: [], outlook: [] };
+
+      Object.keys(rules).forEach(appId => {
+        const rule = rules[appId];
+        
+        let timeRange = [0, 24];
+        if (rule.timeWindow && rule.timeWindow.start && rule.timeWindow.end) {
+          const startHour = parseInt(rule.timeWindow.start.split(':')[0], 10);
+          const endHour = parseInt(rule.timeWindow.end.split(':')[0], 10);
+          if (!isNaN(startHour) && !isNaN(endHour)) {
+            timeRange = [startHour, endHour];
+          }
+        }
+
+        newPrefs[appId.toLowerCase()] = {
+          priority: rule.basePriority,
+          timeRange: timeRange
+        };
+
+        if (['WhatsApp', 'Outlook'].includes(appId) && rule.contactOverrides) {
+          const appIdLower = appId.toLowerCase();
+          const overrides = rule.contactOverrides;
+          
+          const sortedContacts = Object.keys(overrides)
+            .map(name => ({
+              id: name.toLowerCase().replace(/\s+/g, '-'),
+              name: name,
+              priority: overrides[name]
+            }))
+            .sort((a, b) => a.priority - b.priority);
+          
+          newContacts[appIdLower] = sortedContacts;
+        }
+      });
+
+      setPreferences(prev => ({ ...prev, ...newPrefs }));
+      setContactPriorities(prev => ({
+        ...prev,
+        whatsapp: newContacts.whatsapp.length > 0 ? newContacts.whatsapp : prev.whatsapp,
+        outlook: newContacts.outlook.length > 0 ? newContacts.outlook : prev.outlook
+      }));
+    };
+
+    socket.on('preferences_updated', handlePrefsUpdated);
+    return () => socket.off('preferences_updated', handlePrefsUpdated);
+  }, []);
+
   const updatePreference = (appId, field, value) => {
     setPreferences(prev => ({
       ...prev,

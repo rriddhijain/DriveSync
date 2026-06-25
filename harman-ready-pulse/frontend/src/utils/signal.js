@@ -52,8 +52,8 @@ export function calculateSignalAtLocation(carLat, carLng, heatmapPoints, k = 3) 
   withDistance.sort((a, b) => a.dist - b.dist);
   const nearest = withDistance.slice(0, k);
 
-  // Edge case: if the car is exactly on a point (dist ≈ 0), return that intensity
-  if (nearest[0].dist < 1) return nearest[0].intensity;
+  // Edge case: if the car is exactly on a point (dist ≈ 0), return that intensity (clamped)
+  if (nearest[0].dist < 1) return Math.max(0, Math.min(1, nearest[0].intensity));
 
   // Inverse-distance weighting: weight = 1 / dist²
   let weightedSum = 0;

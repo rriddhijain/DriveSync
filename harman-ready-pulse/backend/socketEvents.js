@@ -2,8 +2,11 @@ const { classifyMessageIntent, summarizeQueue } = require('./ai_engine/prompts')
 const queue = require('./state/queue');
 const preferences = require('./state/preferences');
 
-let currentNetwork = "5G";
-let deadZoneStartTime = null;
+// Shared system state encapsulated in a single object
+const systemState = {
+    currentNetwork: "5G",
+    deadZoneStartTime: null
+};
 
 /** Emit the full stats snapshot to all clients */
 function broadcastStats(io) {
@@ -44,10 +47,6 @@ async function flushQueue(io, timeOffline) {
         });
     }
 
-    // Atomic grouped batch delivery of the missed notifications
-    // Phase 4: Suppress sending the batch. We only want the summary card on the frontend.
-    // io.emit('receive_batch_messages', messagesToProcess);
-
     queue.clear();
     io.emit('queue_updated', 0);
     broadcastStats(io);
@@ -57,27 +56,32 @@ module.exports = (io) => {
     io.on('connection', (socket) => {
         console.log(`📡 New Device Connected: ${socket.id}`);
 
-        // Initial State Sync
-        socket.emit('network_state_changed', currentNetwork);
+        // Initial State Sync (Now includes preferences rules)
+        socket.emit('network_state_changed', systemState.currentNetwork);
         socket.emit('queue_updated', queue.length);
         socket.emit('stats_updated', queue.stats);
+        socket.emit('preferences_updated', preferences.rules);
 
         /**
          * EVENT: network_state_changed
          * When switching to 5G from DEAD_ZONE, auto-flush the pending queue.
          */
         socket.on('network_state_changed', async (state) => {
-            const previousNetwork = currentNetwork;
-            currentNetwork = state;
+            if (typeof state !== 'string' || !['5G', 'DEAD_ZONE'].includes(state)) {
+                console.warn(`[WARN] Invalid network state: ${state}`);
+                return;
+            }
+            const previousNetwork = systemState.currentNetwork;
+            systemState.currentNetwork = state;
             io.emit('network_state_changed', state);
             console.log(`[NETWORK] State changed to ${state}`);
 
             if (state === "DEAD_ZONE" && previousNetwork === "5G") {
-                deadZoneStartTime = Date.now();
+                systemState.deadZoneStartTime = Date.now();
             }
 
             if (state === "5G" && previousNetwork === "DEAD_ZONE" && queue.length > 0) {
-                const timeOffline = deadZoneStartTime ? (Date.now() - deadZoneStartTime) : 0;
+                const timeOffline = systemState.deadZoneStartTime ? (Date.now() - systemState.deadZoneStartTime) : 0;
                 console.log(`[NETWORK] Entered 5G with ${queue.length} pending. Auto-flushing for ${timeOffline}ms...`);
                 await flushQueue(io, timeOffline);
             }
@@ -85,53 +89,65 @@ module.exports = (io) => {
 
         /**
          * EVENT: inject_mock_message
-         *
-         * Routing Decision Tree:
-         *   1. Compute intent via AI (EMERGENCY, OOO, SPAM, ROUTINE)
-         *   2. Assign Absolute Priority (0 to 999) using Preferences Engine
-         *   3. Network Routing
          */
         socket.on('inject_mock_message', async (msg) => {
-            msg.timestamp = msg.timestamp || Date.now();
-            msg.app = msg.app || "Unknown";
+            if (!msg || typeof msg !== 'object') {
+                console.warn("[WARN] Invalid message payload: null or not an object");
+                return;
+            }
+            if (typeof msg.text !== 'string' || !msg.text.trim()) {
+                console.warn("[WARN] Invalid message text: must be a non-empty string");
+                return;
+            }
+            const normalizedApp = typeof msg.app === 'string' ? msg.app.trim() : "Unknown";
+            const normalizedSender = typeof msg.sender === 'string' ? msg.sender.trim() : normalizedApp;
+
+            const safeMsg = {
+                id: typeof msg.id === 'string' && msg.id ? msg.id : require('uuid').v4(),
+                app: normalizedApp,
+                sender: normalizedSender,
+                text: msg.text.trim(),
+                is_emergency: !!msg.is_emergency,
+                timestamp: typeof msg.timestamp === 'number' && msg.timestamp > 0 ? msg.timestamp : Date.now()
+            };
 
             // Step 1: Edge AI Classification (Async)
-            const intent = msg.is_emergency ? 'EMERGENCY' : await classifyMessageIntent(msg.text);
-            msg.intent = intent;
+            const intent = safeMsg.is_emergency ? 'EMERGENCY' : await classifyMessageIntent(safeMsg.text);
+            safeMsg.intent = intent;
 
             // Step 2: Algorithmic Triage (Sync Priority Scoring)
-            const priorityData = preferences.calculateAbsolutePriority(msg, intent);
-            msg.absolutePriority = priorityData.priority;
+            const priorityData = preferences.calculateAbsolutePriority(safeMsg, intent);
+            safeMsg.absolutePriority = priorityData.priority;
             
             // Setting helpers for UI / Logging
-            msg.is_emergency = (msg.absolutePriority === 0);
-            msg.isContactOverride = priorityData.isContactOverride;
-            msg.isMuted = priorityData.isMuted;
-            msg.priority = msg.absolutePriority;
+            safeMsg.is_emergency = (safeMsg.absolutePriority === 0);
+            safeMsg.isContactOverride = priorityData.isContactOverride;
+            safeMsg.isMuted = priorityData.isMuted;
+            safeMsg.priority = safeMsg.absolutePriority;
 
-            console.log(`[TRIAGE] Message from ${msg.sender} on ${msg.app} -> Intent: ${intent}, Absolute Priority: ${msg.absolutePriority}`);
+            console.log(`[TRIAGE] Message from ${safeMsg.sender} on ${safeMsg.app} -> Intent: ${intent}, Absolute Priority: ${safeMsg.absolutePriority}`);
 
             // Step 3: Network Routing
-            if (currentNetwork === "5G") {
-                queue.trackDelivered(msg);
-                io.emit('receive_live_message', msg);
-                console.log(`📲 Live Message Broadcasted (5G) - Priority: ${msg.absolutePriority}`);
+            if (systemState.currentNetwork === "5G") {
+                queue.trackDelivered(safeMsg);
+                io.emit('receive_live_message', safeMsg);
+                console.log(`📲 Live Message Broadcasted (5G) - Priority: ${safeMsg.absolutePriority}`);
             } else {
                 // DEAD_ZONE Logic
-                if (msg.absolutePriority === 0 || msg.absolutePriority === 1) {
+                if (safeMsg.absolutePriority === 0 || safeMsg.absolutePriority === 1) {
                     // Bypass queue (Emergency or Priority 1 / Rank 1 VIP)
-                    queue.trackDelivered(msg);
-                    if (msg.absolutePriority === 0) {
-                        io.emit('emergency_alert', msg);
+                    queue.trackDelivered(safeMsg);
+                    if (safeMsg.absolutePriority === 0) {
+                        io.emit('emergency_alert', safeMsg);
                         console.log("🚨 Emergency Alert Broadcasted (DEAD_ZONE)");
                     } else {
-                        io.emit('receive_live_message', msg);
+                        io.emit('receive_live_message', safeMsg);
                         console.log("⚡ Priority 1 Breakthrough Broadcasted (DEAD_ZONE)");
                     }
                 } else {
                     // Queue for Later (Absolute Priority > 1)
-                    queue.push(msg);
-                    console.log(`📦 Message Queued (Priority ${msg.absolutePriority}). Current queue size: ${queue.length}`);
+                    queue.push(safeMsg);
+                    console.log(`📦 Message Queued (Priority ${safeMsg.absolutePriority}). Current queue size: ${queue.length}`);
                     io.emit('queue_updated', queue.length, queue.savedData); // Count & bytes saved
                     broadcastStats(io); // Update full stats
                 }
@@ -140,31 +156,52 @@ module.exports = (io) => {
 
         /**
          * EVENT: update_preferences
-         * Receives config from the Settings modal and updates the engine.
          */
         socket.on('update_preferences', (config) => {
-            if (!config) return;
-            // Map frontend config format to backend rules
+            if (!config || typeof config !== 'object' || Array.isArray(config)) {
+                console.warn("[WARN] Invalid preferences config received");
+                return;
+            }
             Object.keys(config).forEach(appId => {
+                // Prototype pollution check
+                if (appId === '__proto__' || appId === 'constructor') return;
+
                 const appConfig = config[appId];
-                // Find matching rule by lowercasing
+                if (!appConfig || typeof appConfig !== 'object') return;
+
                 const ruleKey = Object.keys(preferences.rules).find(
                     k => k.toLowerCase() === appId.toLowerCase()
                 );
-                if (ruleKey && appConfig.basePriority) {
-                    preferences.rules[ruleKey].basePriority = appConfig.basePriority;
-                    if (appConfig.timeWindow) {
-                        preferences.rules[ruleKey].timeWindow = {
-                            start: appConfig.timeWindow.start,
-                            end: appConfig.timeWindow.end
-                        };
+                if (ruleKey) {
+                    // Validate basePriority
+                    const newPriority = parseInt(appConfig.basePriority, 10);
+                    if (!isNaN(newPriority) && [1, 2, 3].includes(newPriority)) {
+                        preferences.rules[ruleKey].basePriority = newPriority;
                     }
-                    if (appConfig.contactOverrides) {
-                        preferences.rules[ruleKey].contactOverrides = { ...appConfig.contactOverrides };
+
+                    // Validate timeWindow
+                    if (appConfig.timeWindow && typeof appConfig.timeWindow === 'object') {
+                        const { start, end } = appConfig.timeWindow;
+                        if (typeof start === 'string' && typeof end === 'string') {
+                            preferences.rules[ruleKey].timeWindow = { start, end };
+                        }
+                    }
+
+                    // Validate contactOverrides
+                    if (appConfig.contactOverrides && typeof appConfig.contactOverrides === 'object' && !Array.isArray(appConfig.contactOverrides)) {
+                        const safeOverrides = {};
+                        Object.keys(appConfig.contactOverrides).forEach(contactName => {
+                            if (contactName === '__proto__' || contactName === 'constructor') return;
+                            const priorityVal = parseInt(appConfig.contactOverrides[contactName], 10);
+                            if (!isNaN(priorityVal) && [1, 2, 3].includes(priorityVal)) {
+                                safeOverrides[contactName] = priorityVal;
+                            }
+                        });
+                        preferences.rules[ruleKey].contactOverrides = safeOverrides;
                     }
                 }
             });
-            console.log('[PREFS] User preferences updated from Settings UI');
+            console.log('[PREFS] User preferences updated and validated');
             io.emit('preferences_updated', preferences.rules);
         });
 

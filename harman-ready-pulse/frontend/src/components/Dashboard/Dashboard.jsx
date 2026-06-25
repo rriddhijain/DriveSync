@@ -124,6 +124,14 @@ export default function Dashboard() {
       socket.off("network_state_changed", handleNetwork);
       socket.off("ai_summary_generated", handleSummary);
       socket.off("stats_updated", handleStats);
+
+      if (queueThrottleRef.current) {
+        clearTimeout(queueThrottleRef.current);
+      }
+
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
     };
   }, []);
 

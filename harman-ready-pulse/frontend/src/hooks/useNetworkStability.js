@@ -15,7 +15,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 
 /** @type {number} Signal threshold below which we instantly fail (Yellow/Orange/Red) */
-const FAIL_THRESHOLD = 0.8;
+const FAIL_THRESHOLD = 0.6;
 
 /** @type {number} Signal threshold above which we begin recovery (Green) */
 const RECOVER_THRESHOLD = 0.8;

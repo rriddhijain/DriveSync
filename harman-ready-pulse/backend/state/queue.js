@@ -11,7 +11,7 @@ class NotificationQueue {
 
   push(msg) {
     this.messages.push(msg);
-    this.messages.sort((a, b) => (a.absolutePriority - b.absolutePriority) || (b.timestamp - a.timestamp));
+    this.messages.sort((a, b) => (a.absolutePriority - b.absolutePriority) || (a.timestamp - b.timestamp));
     const size = Buffer.byteLength(JSON.stringify(msg), 'utf8');
     this.bytesSaved += size;
     this.deferredCount++;
@@ -25,12 +25,10 @@ class NotificationQueue {
   }
 
   /**
-   * Sorting Engine: Priority first (ascending), then timestamp (oldest first).
+   * Returns copy of sorted queue.
    */
   getAllSorted() {
-    return [...this.messages].sort(
-      (a, b) => (a.absolutePriority - b.absolutePriority) || (b.timestamp - a.timestamp)
-    );
+    return [...this.messages];
   }
 
   clear() {

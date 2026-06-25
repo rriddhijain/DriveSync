@@ -56,7 +56,12 @@ class PreferencesManager {
    *  5. Base Priority
    */
   calculateAbsolutePriority(message, intent) {
-    const { app: appName, sender, timestamp } = message;
+    if (!message) {
+      return { priority: 3, isContactOverride: false, isMuted: false };
+    }
+    const appName = typeof message.app === 'string' ? message.app.trim() : "Unknown";
+    const sender = typeof message.sender === 'string' ? message.sender.trim() : "Unknown";
+    const timestamp = typeof message.timestamp === 'number' ? message.timestamp : Date.now();
     
     // Step 1: AI Intent Override
     if (intent === 'EMERGENCY') {
@@ -81,17 +86,22 @@ class PreferencesManager {
       const appKey = Object.keys(this.rules).find(k => k.toLowerCase() === normalizedApp);
       const app = this.rules[appKey] || { basePriority: 2, timeWindow: null, contactOverrides: {} };
       
-      const msgDate = timestamp ? new Date(timestamp) : new Date();
+      const msgDate = new Date(timestamp);
       const currentHour = msgDate.getHours();
       const currentMinute = msgDate.getMinutes();
 
       let inWindow = true;
-      if (app.timeWindow && app.timeWindow.start && app.timeWindow.end) {
-        const [startHour, startMin] = app.timeWindow.start.split(':').map(Number);
-        const [endHour, endMin] = app.timeWindow.end.split(':').map(Number);
+      if (app.timeWindow && typeof app.timeWindow.start === 'string' && typeof app.timeWindow.end === 'string') {
+        const startParts = app.timeWindow.start.split(':').map(Number);
+        const endParts = app.timeWindow.end.split(':').map(Number);
+        const startHour = isNaN(startParts[0]) ? 0 : startParts[0];
+        const startMin = isNaN(startParts[1]) ? 0 : startParts[1];
+        const endHour = isNaN(endParts[0]) ? 23 : endParts[0];
+        const endMin = isNaN(endParts[1]) ? 59 : endParts[1];
+
         const msgTime = currentHour * 60 + currentMinute;
-        const startTime = startHour * 60 + (startMin || 0);
-        const endTime = endHour * 60 + (endMin || 0);
+        const startTime = startHour * 60 + startMin;
+        const endTime = endHour * 60 + endMin;
         
         if (msgTime < startTime || msgTime >= endTime) {
           inWindow = false;

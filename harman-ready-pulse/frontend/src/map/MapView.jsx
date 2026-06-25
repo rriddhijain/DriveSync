@@ -103,7 +103,6 @@ export default function MapView() {
   const [position, setPosition] = useState(null);
   const [isPlaying, setIsPlaying] = useState(true);
   const [rawSignal, setRawSignal] = useState(1.0);
-  const [liveTelemetryBuffer, setLiveTelemetryBuffer] = useState([]);
 
   // ── Refs ──
   const indexRef = useRef(0);
@@ -121,21 +120,11 @@ export default function MapView() {
     const handleSimulationState = (state) => {
       if (state.playing !== undefined) setIsPlaying(state.playing);
     };
-    
-    const handleTelemetrySync = (payload) => {
-      if (Array.isArray(payload)) {
-        setLiveTelemetryBuffer(payload);
-      } else {
-        setLiveTelemetryBuffer(payload.buffer || []);
-      }
-    };
 
     socket.on("simulation_state", handleSimulationState);
-    socket.on('fleet_telemetry_sync', handleTelemetrySync);
     
     return () => {
       socket.off("simulation_state", handleSimulationState);
-      socket.off('fleet_telemetry_sync', handleTelemetrySync);
     };
   }, []);
 
