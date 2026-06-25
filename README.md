@@ -7,8 +7,6 @@ A production-ready Human-Machine Interface (HMI) and telemetry coordination syst
 ## 2. Live Demo
 
 *   **Live Application (Frontend)**: [https://drive-sync-ybe3.vercel.app/](https://drive-sync-ybe3.vercel.app/)
-*   **GitHub Repository**: [https://github.com/rriddhijain/DriveSync](https://github.com/rriddhijain/DriveSync)
-*   **System Walkthrough Video**: *[Link Placeholder]*
 
 ---
 
