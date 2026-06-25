@@ -1,4 +1,4 @@
-const { checkEmergencyIntent, summarizeQueue } = require('./prompts');
+const { classifyMessageIntent, summarizeQueue } = require('./prompts');
 
 const mockQueue = [
     { sender: "Mom", text: "Are you coming for dinner tonight?" },
@@ -11,11 +11,11 @@ async function runTest() {
     console.log("🔥 Waking up edge AI...");
     
     console.log("\n--- Testing Emergency Gatekeeper ---");
-    const isEmergency = await checkEmergencyIntent("Help, I just got into a car accident and need an ambulance!");
-    console.log(`Emergency Detected (Should be true): ${isEmergency}`);
+    const emergencyIntent = await classifyMessageIntent("Help, I just got into a car accident and need an ambulance!");
+    console.log(`Intent (Should be EMERGENCY): ${emergencyIntent}`);
 
-    const isSpam = await checkEmergencyIntent("Get 20% off your next Uber ride!");
-    console.log(`Emergency Detected (Should be false): ${isSpam}`);
+    const spamIntent = await classifyMessageIntent("Get 20% off your next Uber ride!");
+    console.log(`Intent (Should be SPAM): ${spamIntent}`);
 
     console.log("\n--- Testing Queue Summarizer ---");
     const summary = await summarizeQueue(mockQueue);
